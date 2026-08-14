@@ -1156,7 +1156,8 @@ async function pollReasoningLogs(logKey) {
       }
       if (body) {
         const html = items.map((e) => {
-          const eid = e.id || `${logKey}-${Math.random().toString(36).slice(2, 8)}`;
+          const baseId = e.id || `${logKey}-${Math.random().toString(36).slice(2, 8)}`;
+          const eid = `${baseId}-${e.type || "request"}`;
           const time = e.created_at ? new Date(e.created_at).toLocaleTimeString("zh-CN", { hour12: false }) : "";
           const isPending = e.status === "pending";
           const isError = e.status === "error";
@@ -1170,11 +1171,11 @@ async function pollReasoningLogs(logKey) {
             : isError ? '<span class="log-dot err"></span>'
             : isResponse ? '<span class="log-dot ok"></span>'
             : '<span class="log-dot"></span>';
-          const hasDetail = Boolean(e.prompt || e.response || e.error);
           const detailParts = [];
-          if (e.prompt) detailParts.push(`<div class="log-detail-label">Prompt（发送给模型）</div><pre class="log-detail-text">${escapeHtml(e.prompt)}</pre>`);
-          if (e.response) detailParts.push(`<div class="log-detail-label">Response（模型返回）</div><pre class="log-detail-text">${escapeHtml(e.response)}</pre>`);
+          if (isResponse && e.response) detailParts.push(`<div class="log-detail-label">Response（模型返回）</div><pre class="log-detail-text">${escapeHtml(e.response)}</pre>`);
+          else if (e.prompt) detailParts.push(`<div class="log-detail-label">Prompt（发送给模型）</div><pre class="log-detail-text">${escapeHtml(e.prompt)}</pre>`);
           if (isError && e.error) detailParts.push(`<div class="log-detail-label">Error</div><pre class="log-detail-text log-err">${escapeHtml(e.error)}</pre>`);
+          const hasDetail = detailParts.length > 0;
           const detailHtml = hasDetail ? `<div class="reasoning-log-detail" id="detail-${eid}" style="display:none;">${detailParts.join("")}</div>` : "";
           const clickAttr = hasDetail ? ` onclick="toggleLogDetail('${eid}')"` : "";
           const cursorCls = hasDetail ? " clickable" : "";
