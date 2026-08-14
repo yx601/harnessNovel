@@ -1073,7 +1073,7 @@ function reasoningLogMarkup(logKey, entries) {
 
 function toggleReasoningLog(key) {
   wizardState.reasoningLogExpanded[key] = !wizardState.reasoningLogExpanded[key];
-  const panel = $(`#reasoning-log-${key}`);
+  const panel = document.getElementById(`reasoning-log-${key}`);
   if (!panel) return;
   const expanded = wizardState.reasoningLogExpanded[key];
   panel.classList.toggle("expanded", expanded);
@@ -1085,7 +1085,7 @@ function toggleReasoningLog(key) {
 }
 
 function ensureReasoningLogPanel(logKey, scope) {
-  const existing = $(`#reasoning-log-${logKey}`);
+  const existing = document.getElementById(`reasoning-log-${logKey}`);
   if (existing) return;
   const jobProgress = $("#design-job-progress");
   const chatList = $("#chat-message-list");
@@ -1130,7 +1130,7 @@ async function pollReasoningLogs(logKey) {
     if (items.length > 0) {
       wizardState.reasoningLogOffset[logKey] = data.next_offset;
     }
-    const panel = $(`#reasoning-log-${logKey}`);
+    const panel = document.getElementById(`reasoning-log-${logKey}`);
     if (!panel) return;
     if (items.length > 0) {
       let body = panel.querySelector(".reasoning-log-body");
