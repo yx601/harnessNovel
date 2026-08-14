@@ -1084,6 +1084,12 @@ function toggleReasoningLog(key) {
   }
 }
 
+function toggleLogDetail(eid) {
+  const el = document.getElementById(`detail-${eid}`);
+  if (!el) return;
+  el.style.display = el.style.display === "none" ? "block" : "none";
+}
+
 function ensureReasoningLogPanel(logKey, scope) {
   const existing = document.getElementById(`reasoning-log-${logKey}`);
   if (existing) return;
@@ -1140,6 +1146,7 @@ async function pollReasoningLogs(logKey) {
       }
       if (body) {
         const html = items.map((e) => {
+          const eid = e.id || `${logKey}-${Math.random().toString(36).slice(2, 8)}`;
           const time = e.created_at ? new Date(e.created_at).toLocaleTimeString("zh-CN", { hour12: false }) : "";
           const isPending = e.status === "pending";
           const isError = e.status === "error";
@@ -1154,7 +1161,15 @@ async function pollReasoningLogs(logKey) {
             : isError ? '<span class="log-dot err"></span>'
             : e.type === "response" ? '<span class="log-dot ok"></span>'
             : '<span class="log-dot"></span>';
-          return `<div class="reasoning-log-entry ${e.type || "request"} ${e.status || ""}">${icon}<span class="log-time">${time}</span><span class="log-model">${model}</span>${promptPreview ? `<span class="log-meta">${promptPreview}</span>` : ""}${responseInfo}</div>`;
+          const hasDetail = Boolean(e.prompt || e.response || e.error);
+          const detailParts = [];
+          if (e.prompt) detailParts.push(`<div class="log-detail-label">Prompt</div><pre class="log-detail-text">${escapeHtml(e.prompt)}</pre>`);
+          if (e.response) detailParts.push(`<div class="log-detail-label">Response</div><pre class="log-detail-text">${escapeHtml(e.response)}</pre>`);
+          if (isError && e.error) detailParts.push(`<div class="log-detail-label">Error</div><pre class="log-detail-text log-err">${escapeHtml(e.error)}</pre>`);
+          const detailHtml = hasDetail ? `<div class="reasoning-log-detail" id="detail-${eid}" style="display:none;">${detailParts.join("")}</div>` : "";
+          const clickAttr = hasDetail ? ` onclick="toggleLogDetail('${eid}')"` : "";
+          const cursorCls = hasDetail ? " clickable" : "";
+          return `<div class="reasoning-log-entry ${e.type || "request"} ${e.status || ""}${cursorCls}"${clickAttr}>${icon}<span class="log-time">${time}</span><span class="log-model">${model}</span>${promptPreview ? `<span class="log-meta">${promptPreview}</span>` : ""}${responseInfo}</div>${detailHtml}`;
         }).join("");
         body.insertAdjacentHTML("beforeend", html);
         body.scrollTop = body.scrollHeight;
