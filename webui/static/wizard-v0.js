@@ -1292,6 +1292,9 @@ function renderDesignChat(scope, conversation, job = null) {
       showToast("已重置，下一条消息将重新生成初版。");
     } catch (error) { showToast(error.message || "无法重置。", true); }
   });
+  const logKey = `design:${scope}`;
+  ensureReasoningLogPanel(logKey, scope);
+  pollReasoningLogs(logKey);
 }
 
 async function loadDesignChat(scope) {
@@ -1421,9 +1424,12 @@ async function sendDesignMessage(scope) {
     wizardState.chatAttachments[scope] = [];
     $("#chat-typing")?.remove();
     wizardState.designJobCompleted[scope] = 0;
+    const logKey = `design:${scope}`;
+    wizardState.reasoningLogOffset[logKey] = 0;
     const composer = $("#design-chat .chat-composer");
     composer?.insertAdjacentHTML("beforebegin", designJobMarkup(job));
     bindDesignJobControls(scope);
+    ensureReasoningLogPanel(logKey, scope);
     started = true;
     pollDesignJob(scope);
   } catch (error) {
