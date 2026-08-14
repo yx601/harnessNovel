@@ -1091,8 +1091,18 @@ function ensureReasoningLogPanel(logKey, scope) {
   const chatList = $("#chat-message-list");
   const insertAfter = jobProgress || chatList;
   if (!insertAfter || !insertAfter.parentNode) return;
+  if (!(logKey in wizardState.reasoningLogExpanded)) {
+    wizardState.reasoningLogExpanded[logKey] = true;
+  }
+  const expanded = wizardState.reasoningLogExpanded[logKey];
   const panel = document.createElement("div");
-  panel.innerHTML = reasoningLogMarkup(logKey, []);
+  panel.innerHTML = `<div class="reasoning-log-panel ${expanded ? "expanded" : ""}" id="reasoning-log-${logKey}">
+    <div class="reasoning-log-header" onclick="toggleReasoningLog('${logKey}')">
+      <span class="reasoning-log-toggle">${expanded ? "▼" : "▶"}</span>
+      <span>推理日志 (0)</span>
+    </div>
+    ${expanded ? '<div class="reasoning-log-body"></div>' : ""}
+  </div>`;
   const el = panel.firstElementChild;
   if (el) {
     insertAfter.insertAdjacentElement("afterend", el);
@@ -1116,16 +1126,20 @@ async function pollReasoningLogs(logKey) {
   }
   try {
     const data = await api(url);
-    if (data.items && data.items.length > 0) {
+    const items = data.items || [];
+    if (items.length > 0) {
       wizardState.reasoningLogOffset[logKey] = data.next_offset;
-      const panel = $(`#reasoning-log-${logKey}`);
-      if (panel && wizardState.reasoningLogExpanded[logKey]) {
-        let body = panel.querySelector(".reasoning-log-body");
-        if (!body) {
-          panel.insertAdjacentHTML("beforeend", '<div class="reasoning-log-body"></div>');
-          body = panel.querySelector(".reasoning-log-body");
-        }
-        const html = data.items.map((e) => {
+    }
+    const panel = $(`#reasoning-log-${logKey}`);
+    if (!panel) return;
+    if (items.length > 0) {
+      let body = panel.querySelector(".reasoning-log-body");
+      if (!body) {
+        panel.insertAdjacentHTML("beforeend", '<div class="reasoning-log-body"></div>');
+        body = panel.querySelector(".reasoning-log-body");
+      }
+      if (body) {
+        const html = items.map((e) => {
           const time = e.created_at ? new Date(e.created_at).toLocaleTimeString("zh-CN", { hour12: false }) : "";
           const isPending = e.status === "pending";
           const isError = e.status === "error";
@@ -1145,11 +1159,11 @@ async function pollReasoningLogs(logKey) {
         body.insertAdjacentHTML("beforeend", html);
         body.scrollTop = body.scrollHeight;
       }
-      const countEl = panel?.querySelector(".reasoning-log-header span:last-child");
-      if (countEl) {
-        const total = (wizardState.reasoningLogOffset[logKey] || 0);
-        countEl.textContent = `推理日志 (${total})`;
-      }
+    }
+    const countEl = panel.querySelector(".reasoning-log-header span:last-child");
+    if (countEl) {
+      const total = wizardState.reasoningLogOffset[logKey] || 0;
+      countEl.textContent = `推理日志 (${total})`;
     }
   } catch (_) { /* ignore */ }
 }
@@ -1330,7 +1344,6 @@ function pollDesignJob(scope) {
     const base = `/api/workspaces/${encodeURIComponent(wizardState.workspace)}/design/${scope}`;
     try {
       const job = await api(`${base}/job`);
-      pollReasoningLogs(logKey);
       if (["queued", "running", "pausing", "paused", "stopping"].includes(job.status)) {
         const completed = Number(job.completed || 0);
         const previous = Number(wizardState.designJobCompleted[scope] || 0);
@@ -1344,12 +1357,12 @@ function pollDesignJob(scope) {
           holder.innerHTML = designJobMarkup(job);
           progress.replaceWith(holder.firstElementChild);
           bindDesignJobControls(scope);
-          ensureReasoningLogPanel(logKey, scope);
         } else {
           const conversation = await api(`${base}/conversation`);
           renderDesignChat(scope, conversation, job);
-          ensureReasoningLogPanel(logKey, scope);
         }
+        ensureReasoningLogPanel(logKey, scope);
+        pollReasoningLogs(logKey);
         designJobPollTimer = setTimeout(poll, 900);
         return;
       }
