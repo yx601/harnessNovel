@@ -580,6 +580,8 @@ fieldset[hidden] { display: none; }
 .chat-job-progress.is-stopping .chat-job-progress-track i { background: var(--coral); }
 .chat-job-progress.is-interrupted .chat-job-status-dot { background: #7a8c83; box-shadow: 0 0 0 4px rgba(104,118,111,.08); animation: none; }
 .chat-job-progress.is-interrupted .chat-job-progress-track i { background: #8ca398; }
+.chat-job-progress.is-done { opacity: 0.85; }
+.chat-job-progress.is-done .chat-job-status-dot { background: var(--green, #2d8659); box-shadow: 0 0 0 4px rgba(45,134,89,.08); animation: none; }
 .chat-job-action.continue { min-width: 76px; }
 .chat-job-progress.is-refining .chat-job-progress-track i { width: 32% !important; animation: refineProgress 1.35s ease-in-out infinite; }
 @keyframes jobStatusPulse { 0%, 100% { opacity: .55; transform: scale(.82); } 50% { opacity: 1; transform: scale(1); } }
@@ -660,7 +662,7 @@ fieldset[hidden] { display: none; }
 .reasoning-log-header:hover { background: rgba(0,0,0,0.03); }
 .reasoning-log-toggle { font-size: 10px; transition: transform 0.15s; display: inline-block; width: 14px; }
 .reasoning-log-panel.expanded .reasoning-log-body { display: block; }
-.reasoning-log-body { max-height: 240px; overflow-y: auto; padding: 4px 12px 8px; border-top: 1px solid var(--border, #e4ebe6); }
+.reasoning-log-body { display: none; max-height: 240px; overflow-y: auto; padding: 4px 12px 8px; border-top: 1px solid var(--border, #e4ebe6); }
 .reasoning-log-entry { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-family: var(--mono, ui-monospace, monospace); line-height: 1.5; font-size: 11px; color: var(--ink, #2a3b33); }
 .reasoning-log-entry.clickable { cursor: pointer; }
 .reasoning-log-entry.clickable:hover { background: rgba(0,0,0,0.05); border-radius: 4px; }
@@ -672,6 +674,9 @@ fieldset[hidden] { display: none; }
 .reasoning-log-entry .log-meta { color: var(--muted, #8a9b92); }
 .reasoning-log-entry .log-ok { color: var(--green, #2d8659); }
 .reasoning-log-entry .log-err { color: var(--red, #c44d3e); }
+.log-tag { flex-shrink: 0; font-size: 10px; font-weight: 600; padding: 0 5px; border-radius: 3px; line-height: 1.6; }
+.log-tag.req { background: rgba(74,144,117,0.12); color: var(--primary, #4a9075); }
+.log-tag.resp { background: rgba(45,134,89,0.12); color: var(--green, #2d8659); }
 .log-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted, #b0c4b8); flex-shrink: 0; }
 .log-dot.spin { background: var(--primary, #4a9075); animation: log-pulse 1s ease-in-out infinite; }
 .log-dot.ok { background: var(--green, #2d8659); }

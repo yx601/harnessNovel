@@ -984,6 +984,9 @@ function chatMessageMarkup(turn) {
 }
 
 function designJobMarkup(job) {
+  const promptBtn = (j) => Number(j?.prompt_count || 0) > 0
+    ? `<button id="show-design-prompt" class="chat-job-action prompt" type="button">Prompt · ${Number(j.prompt_count)}</button>`
+    : "";
   if (job && ["idle", "stopped", "failed"].includes(job.status) && job.can_resume) {
     const completed = Number(job.completed || 0);
     const total = Math.max(1, Number(job.total || 1));
@@ -995,9 +998,19 @@ function designJobMarkup(job) {
           <strong>舞台设计尚未完成</strong>
           <span>已保留 ${completed} / ${total} 个舞台</span>
         </div>
-        <button id="continue-design-job" class="chat-job-action resume continue" type="button"><span>▶</span>继续生成</button>
+        <div class="chat-job-actions">${promptBtn(job)}<button id="continue-design-job" class="chat-job-action resume continue" type="button"><span>▶</span>继续生成</button></div>
       </div>
       <div class="chat-job-progress-track"><i style="width:${percent}%"></i></div>
+    </div>`;
+  }
+  if (job && ["completed", "stopped", "failed"].includes(job.status) && Number(job.prompt_count || 0) > 0) {
+    const label = job.status === "completed" ? "生成完成" : job.status === "failed" ? "生成失败" : "已结束";
+    return `<div class="chat-job-progress is-done" id="design-job-progress">
+      <div class="chat-job-progress-main">
+        <span class="chat-job-status-dot" aria-hidden="true"></span>
+        <div class="chat-job-progress-copy"><strong>${label}</strong></div>
+        <div class="chat-job-actions">${promptBtn(job)}</div>
+      </div>
     </div>`;
   }
   if (!job || !["queued", "running", "pausing", "paused", "stopping"].includes(job.status)) return "";
@@ -1007,15 +1020,12 @@ function designJobMarkup(job) {
   const paused = job.status === "paused";
   const pausing = job.status === "pausing";
   const stopping = job.status === "stopping";
-  const promptAction = Number(job.prompt_count || 0) > 0
-    ? `<button id="show-design-prompt" class="chat-job-action prompt" type="button">Prompt · ${Number(job.prompt_count)}</button>`
-    : "";
   const stageActions = job.progress_kind === "stage_design"
-    ? `<div class="chat-job-actions">${promptAction}${paused
+    ? `<div class="chat-job-actions">${promptBtn(job)}${paused
         ? '<button id="resume-design-job" class="chat-job-action resume" type="button"><span>▶</span>继续</button>'
         : `<button id="pause-design-job" class="chat-job-action" type="button" ${(pausing || stopping) ? "disabled" : ""}><span>${pausing ? "…" : "Ⅱ"}</span>${pausing ? "暂停中" : "暂停"}</button>`}
        <button id="stop-design-job" class="chat-job-action stop" type="button" ${stopping ? "disabled" : ""}><span>■</span>${stopping ? "结束中" : "结束"}</button></div>`
-    : (promptAction ? `<div class="chat-job-actions">${promptAction}</div>` : "");
+    : (Number(job.prompt_count || 0) > 0 ? `<div class="chat-job-actions">${promptBtn(job)}</div>` : "");
   const progressMeta = job.progress_kind === "design_concept"
     ? `${completed} / ${total} 项设计 · ${Math.round(completed * 100 / total)}%`
     : stopping ? `正在结束 · 已完成 ${completed} / ${total} 个舞台`
@@ -1151,25 +1161,24 @@ async function pollReasoningLogs(logKey) {
           const isPending = e.status === "pending";
           const isError = e.status === "error";
           const model = e.model ? escapeHtml(e.model) : "";
-          const promptPreview = e.prompt_chars > 0 ? `${e.prompt_chars} 字符` : "";
-          const responseInfo = e.type === "response"
-            ? (isError
-                ? `<span class="log-err">失败: ${escapeHtml((e.error || "").substring(0, 80))}</span>`
-                : `<span class="log-ok">${e.response_chars} 字符 / ${e.duration_sec}s</span>`)
-            : "";
+          const isResponse = e.type === "response";
+          const typeTag = isResponse ? '<span class="log-tag resp">响应</span>' : '<span class="log-tag req">请求</span>';
+          const sizeInfo = isResponse
+            ? (isError ? `<span class="log-err">失败</span>` : `<span class="log-ok">${e.response_chars} 字 / ${e.duration_sec}s</span>`)
+            : (e.prompt_chars > 0 ? `<span class="log-meta">${e.prompt_chars} 字</span>` : "");
           const icon = isPending ? '<span class="log-dot spin"></span>'
             : isError ? '<span class="log-dot err"></span>'
-            : e.type === "response" ? '<span class="log-dot ok"></span>'
+            : isResponse ? '<span class="log-dot ok"></span>'
             : '<span class="log-dot"></span>';
           const hasDetail = Boolean(e.prompt || e.response || e.error);
           const detailParts = [];
-          if (e.prompt) detailParts.push(`<div class="log-detail-label">Prompt</div><pre class="log-detail-text">${escapeHtml(e.prompt)}</pre>`);
-          if (e.response) detailParts.push(`<div class="log-detail-label">Response</div><pre class="log-detail-text">${escapeHtml(e.response)}</pre>`);
+          if (e.prompt) detailParts.push(`<div class="log-detail-label">Prompt（发送给模型）</div><pre class="log-detail-text">${escapeHtml(e.prompt)}</pre>`);
+          if (e.response) detailParts.push(`<div class="log-detail-label">Response（模型返回）</div><pre class="log-detail-text">${escapeHtml(e.response)}</pre>`);
           if (isError && e.error) detailParts.push(`<div class="log-detail-label">Error</div><pre class="log-detail-text log-err">${escapeHtml(e.error)}</pre>`);
           const detailHtml = hasDetail ? `<div class="reasoning-log-detail" id="detail-${eid}" style="display:none;">${detailParts.join("")}</div>` : "";
           const clickAttr = hasDetail ? ` onclick="toggleLogDetail('${eid}')"` : "";
           const cursorCls = hasDetail ? " clickable" : "";
-          return `<div class="reasoning-log-entry ${e.type || "request"} ${e.status || ""}${cursorCls}"${clickAttr}>${icon}<span class="log-time">${time}</span><span class="log-model">${model}</span>${promptPreview ? `<span class="log-meta">${promptPreview}</span>` : ""}${responseInfo}</div>${detailHtml}`;
+          return `<div class="reasoning-log-entry ${e.type || "request"} ${e.status || ""}${cursorCls}"${clickAttr}>${icon}<span class="log-time">${time}</span>${typeTag}<span class="log-model">${model}</span>${sizeInfo}</div>${detailHtml}`;
         }).join("");
         body.insertAdjacentHTML("beforeend", html);
         body.scrollTop = body.scrollHeight;
