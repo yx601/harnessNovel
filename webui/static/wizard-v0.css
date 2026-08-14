@@ -653,3 +653,22 @@ fieldset[hidden] { display: none; }
 .chat-panel-bar { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #e4ebe6; background: #f7f9f8; }
 .chat-panel-bar-label { color: #4a6557; font-size: 12px; font-weight: 700; }
 .chat-panel-bar select, .chat-panel-bar input { height: 32px; min-height: 0; padding: 0 10px; border: 1px solid #dde6e1; border-radius: 6px; color: var(--ink); background: #fff; font-size: 12px; }
+
+/* Reasoning log panel */
+.reasoning-log-panel { margin: 0 0 12px; border: 1px solid var(--border, #dde6e1); border-radius: 8px; background: var(--surface-2, #f7f9f8); font-size: 12px; overflow: hidden; }
+.reasoning-log-header { display: flex; align-items: center; gap: 6px; padding: 8px 12px; cursor: pointer; user-select: none; color: var(--muted, #6b7c72); font-weight: 600; }
+.reasoning-log-header:hover { background: rgba(0,0,0,0.03); }
+.reasoning-log-toggle { font-size: 10px; transition: transform 0.15s; display: inline-block; width: 14px; }
+.reasoning-log-panel.expanded .reasoning-log-body { display: block; }
+.reasoning-log-body { max-height: 240px; overflow-y: auto; padding: 4px 12px 8px; border-top: 1px solid var(--border, #e4ebe6); }
+.reasoning-log-entry { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-family: var(--mono, ui-monospace, monospace); line-height: 1.5; font-size: 11px; color: var(--ink, #2a3b33); }
+.reasoning-log-entry .log-time { color: var(--muted, #6b7c72); flex-shrink: 0; white-space: nowrap; }
+.reasoning-log-entry .log-model { font-weight: 600; flex-shrink: 0; }
+.reasoning-log-entry .log-meta { color: var(--muted, #8a9b92); }
+.reasoning-log-entry .log-ok { color: var(--green, #2d8659); }
+.reasoning-log-entry .log-err { color: var(--red, #c44d3e); }
+.log-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted, #b0c4b8); flex-shrink: 0; }
+.log-dot.spin { background: var(--primary, #4a9075); animation: log-pulse 1s ease-in-out infinite; }
+.log-dot.ok { background: var(--green, #2d8659); }
+.log-dot.err { background: var(--red, #c44d3e); }
+@keyframes log-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }

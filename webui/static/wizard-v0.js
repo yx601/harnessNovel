@@ -72,6 +72,8 @@ const wizardState = {
   arcsJobCompleted: {},
   chaptersJobCompleted: {},
   designJobCompleted: {},
+  reasoningLogOffset: {},
+  reasoningLogExpanded: {},
   systemPanelStatus: null,
   taskView: "log",
   currentPromptText: "",
@@ -1032,6 +1034,126 @@ function designJobMarkup(job) {
   </div>`;
 }
 
+function reasoningLogMarkup(logKey, entries) {
+  if (!entries || entries.length === 0) return "";
+  const expanded = wizardState.reasoningLogExpanded[logKey];
+  const items = entries.map((e) => {
+    const time = e.created_at ? new Date(e.created_at).toLocaleTimeString("zh-CN", { hour12: false }) : "";
+    const isPending = e.status === "pending";
+    const isError = e.status === "error";
+    const model = e.model ? escapeHtml(e.model) : "";
+    const promptPreview = e.prompt_chars > 0
+      ? `${e.prompt_chars} 字符`
+      : "";
+    const responseInfo = e.type === "response"
+      ? (isError
+          ? `<span class="log-err">失败: ${escapeHtml((e.error || "").substring(0, 80))}</span>`
+          : `<span class="log-ok">${e.response_chars} 字符 / ${e.duration_sec}s</span>`)
+      : "";
+    const icon = isPending ? '<span class="log-dot spin"></span>'
+      : isError ? '<span class="log-dot err"></span>'
+      : e.type === "response" ? '<span class="log-dot ok"></span>'
+      : '<span class="log-dot"></span>';
+    return `<div class="reasoning-log-entry ${e.type || "request"} ${e.status || ""}">
+      ${icon}
+      <span class="log-time">${time}</span>
+      <span class="log-model">${model}</span>
+      ${promptPreview ? `<span class="log-meta">${promptPreview}</span>` : ""}
+      ${responseInfo}
+    </div>`;
+  }).join("");
+  return `<div class="reasoning-log-panel ${expanded ? "expanded" : ""}" id="reasoning-log-${logKey}">
+    <div class="reasoning-log-header" onclick="toggleReasoningLog('${logKey}')">
+      <span class="reasoning-log-toggle">${expanded ? "▼" : "▶"}</span>
+      <span>推理日志 (${entries.length})</span>
+    </div>
+    ${expanded ? `<div class="reasoning-log-body">${items}</div>` : ""}
+  </div>`;
+}
+
+function toggleReasoningLog(key) {
+  wizardState.reasoningLogExpanded[key] = !wizardState.reasoningLogExpanded[key];
+  const panel = $(`#reasoning-log-${key}`);
+  if (!panel) return;
+  const expanded = wizardState.reasoningLogExpanded[key];
+  panel.classList.toggle("expanded", expanded);
+  const header = panel.querySelector(".reasoning-log-toggle");
+  if (header) header.textContent = expanded ? "▼" : "▶";
+  if (expanded && !panel.querySelector(".reasoning-log-body")) {
+    pollReasoningLogs(key);
+  }
+}
+
+function ensureReasoningLogPanel(logKey, scope) {
+  const existing = $(`#reasoning-log-${logKey}`);
+  if (existing) return;
+  const jobProgress = $("#design-job-progress");
+  const chatList = $("#chat-message-list");
+  const insertAfter = jobProgress || chatList;
+  if (!insertAfter || !insertAfter.parentNode) return;
+  const panel = document.createElement("div");
+  panel.innerHTML = reasoningLogMarkup(logKey, []);
+  const el = panel.firstElementChild;
+  if (el) {
+    insertAfter.insertAdjacentElement("afterend", el);
+  }
+}
+
+async function pollReasoningLogs(logKey) {
+  const parts = logKey.split(":");
+  const offset = wizardState.reasoningLogOffset[logKey] || 0;
+  let url;
+  if (parts[0] === "design") {
+    url = `/api/workspaces/${encodeURIComponent(wizardState.workspace)}/design/${parts[1]}/logs?offset=${offset}`;
+  } else if (parts[0] === "arcs") {
+    url = `/api/workspaces/${encodeURIComponent(wizardState.workspace)}/arcs/${parts[1]}/logs?offset=${offset}`;
+  } else if (parts[0] === "chapters") {
+    url = `/api/workspaces/${encodeURIComponent(wizardState.workspace)}/chapters/${parts[1]}/${parts[2]}/logs?offset=${offset}`;
+  } else if (parts[0] === "drafts") {
+    url = `/api/workspaces/${encodeURIComponent(wizardState.workspace)}/drafts/${parts[1]}/${parts[2]}/logs?offset=${offset}`;
+  } else {
+    return;
+  }
+  try {
+    const data = await api(url);
+    if (data.items && data.items.length > 0) {
+      wizardState.reasoningLogOffset[logKey] = data.next_offset;
+      const panel = $(`#reasoning-log-${logKey}`);
+      if (panel && wizardState.reasoningLogExpanded[logKey]) {
+        let body = panel.querySelector(".reasoning-log-body");
+        if (!body) {
+          panel.insertAdjacentHTML("beforeend", '<div class="reasoning-log-body"></div>');
+          body = panel.querySelector(".reasoning-log-body");
+        }
+        const html = data.items.map((e) => {
+          const time = e.created_at ? new Date(e.created_at).toLocaleTimeString("zh-CN", { hour12: false }) : "";
+          const isPending = e.status === "pending";
+          const isError = e.status === "error";
+          const model = e.model ? escapeHtml(e.model) : "";
+          const promptPreview = e.prompt_chars > 0 ? `${e.prompt_chars} 字符` : "";
+          const responseInfo = e.type === "response"
+            ? (isError
+                ? `<span class="log-err">失败: ${escapeHtml((e.error || "").substring(0, 80))}</span>`
+                : `<span class="log-ok">${e.response_chars} 字符 / ${e.duration_sec}s</span>`)
+            : "";
+          const icon = isPending ? '<span class="log-dot spin"></span>'
+            : isError ? '<span class="log-dot err"></span>'
+            : e.type === "response" ? '<span class="log-dot ok"></span>'
+            : '<span class="log-dot"></span>';
+          return `<div class="reasoning-log-entry ${e.type || "request"} ${e.status || ""}">${icon}<span class="log-time">${time}</span><span class="log-model">${model}</span>${promptPreview ? `<span class="log-meta">${promptPreview}</span>` : ""}${responseInfo}</div>`;
+        }).join("");
+        body.insertAdjacentHTML("beforeend", html);
+        body.scrollTop = body.scrollHeight;
+      }
+      const countEl = panel?.querySelector(".reasoning-log-header span:last-child");
+      if (countEl) {
+        const total = (wizardState.reasoningLogOffset[logKey] || 0);
+        countEl.textContent = `推理日志 (${total})`;
+      }
+    }
+  } catch (_) { /* ignore */ }
+}
+
 function designChatPanelMarkup(scope, conversation, job = null) {
   const turns = (conversation && Array.isArray(conversation.turns)) ? conversation.turns : [];
   const busy = Boolean(job && ["queued", "running", "pausing", "paused", "stopping"].includes(job.status));
@@ -1201,11 +1323,14 @@ async function controlDesignJob(scope, action) {
 function pollDesignJob(scope) {
   if (designJobPollTimer) clearTimeout(designJobPollTimer);
   const expectedStep = scope === "concept" ? "design" : "stage";
+  const logKey = `design:${scope}`;
+  wizardState.reasoningLogOffset[logKey] = 0;
   const poll = async () => {
     if (wizardState.activeStep !== expectedStep) return;
     const base = `/api/workspaces/${encodeURIComponent(wizardState.workspace)}/design/${scope}`;
     try {
       const job = await api(`${base}/job`);
+      pollReasoningLogs(logKey);
       if (["queued", "running", "pausing", "paused", "stopping"].includes(job.status)) {
         const completed = Number(job.completed || 0);
         const previous = Number(wizardState.designJobCompleted[scope] || 0);
@@ -1219,13 +1344,16 @@ function pollDesignJob(scope) {
           holder.innerHTML = designJobMarkup(job);
           progress.replaceWith(holder.firstElementChild);
           bindDesignJobControls(scope);
+          ensureReasoningLogPanel(logKey, scope);
         } else {
           const conversation = await api(`${base}/conversation`);
           renderDesignChat(scope, conversation, job);
+          ensureReasoningLogPanel(logKey, scope);
         }
         designJobPollTimer = setTimeout(poll, 900);
         return;
       }
+      pollReasoningLogs(logKey);
       await refreshWorkspaceArtifacts();
       const conversation = await api(`${base}/conversation`);
       renderDesignChat(scope, conversation, job);

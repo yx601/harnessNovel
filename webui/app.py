@@ -313,6 +313,10 @@ def create_app(workspace_root: str | None = None) -> FastAPI:
     def arcs_prompts(name: str, volume: int) -> dict[str, Any]:
         return runtime.arcs_chat.prompts(name, volume)
 
+    @app.get("/api/workspaces/{name}/arcs/{volume}/logs")
+    def arcs_logs(name: str, volume: int, offset: int = Query(default=0)) -> dict[str, Any]:
+        return runtime.arcs_chat.logs(name, volume, offset)
+
     @app.post("/api/workspaces/{name}/arcs/{volume}/pause")
     def arcs_pause(name: str, volume: int) -> dict[str, Any]:
         try:
@@ -414,6 +418,10 @@ def create_app(workspace_root: str | None = None) -> FastAPI:
     def chapters_prompts(name: str, volume: int, arc_idx: int) -> dict[str, Any]:
         return runtime.chapters_chat.prompts(name, volume, arc_idx)
 
+    @app.get("/api/workspaces/{name}/chapters/{volume}/{arc_idx}/logs")
+    def chapters_logs(name: str, volume: int, arc_idx: int, offset: int = Query(default=0)) -> dict[str, Any]:
+        return runtime.chapters_chat.logs(name, volume, arc_idx, offset)
+
     @app.post("/api/workspaces/{name}/chapters/{volume}/{arc_idx}/pause")
     def chapters_pause(name: str, volume: int, arc_idx: int) -> dict[str, Any]:
         try:
@@ -491,6 +499,10 @@ def create_app(workspace_root: str | None = None) -> FastAPI:
     @app.get("/api/workspaces/{name}/drafts/{volume}/{arc_idx}/prompts")
     def drafts_prompts(name: str, volume: int, arc_idx: int) -> dict[str, Any]:
         return runtime.draft_chat.prompts(name, volume, arc_idx)
+
+    @app.get("/api/workspaces/{name}/drafts/{volume}/{arc_idx}/logs")
+    def drafts_logs(name: str, volume: int, arc_idx: int, offset: int = Query(default=0)) -> dict[str, Any]:
+        return runtime.draft_chat.logs(name, volume, arc_idx, offset)
 
     @app.post("/api/workspaces/{name}/drafts/{volume}/{arc_idx}/reset")
     def drafts_reset(name: str, volume: int, arc_idx: int) -> dict[str, Any]:
@@ -593,6 +605,12 @@ def create_app(workspace_root: str | None = None) -> FastAPI:
         if scope not in {"concept", "stage"}:
             raise _http_error(ValueError("设计步骤只能是 concept 或 stage。"))
         return runtime.design_chat.prompts(name, scope)
+
+    @app.get("/api/workspaces/{name}/design/{scope}/logs")
+    def design_logs(name: str, scope: str, offset: int = Query(default=0)) -> dict[str, Any]:
+        if scope not in {"concept", "stage"}:
+            raise _http_error(ValueError("设计步骤只能是 concept 或 stage。"))
+        return runtime.design_chat.logs(name, scope, offset)
 
     @app.post("/api/workspaces/{name}/design/{scope}/pause")
     def design_pause(name: str, scope: str) -> dict[str, Any]:

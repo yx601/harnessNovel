@@ -187,6 +187,7 @@ class ArcsChatManager:
                 "stop_event": stop_event,
                 "cancel_event": cancel_event,
                 "prompt_history": [],
+                "log_entries": [],
                 "prompt_count": 0,
                 "error": "",
             }
@@ -215,14 +216,18 @@ class ArcsChatManager:
                     active = self._jobs.get(key)
                     if not active or active["id"] != job["id"]:
                         return
-                    history = active.setdefault("prompt_history", [])
-                    history.append(event)
-                    del history[:-50]
-                    active.update(
-                        prompt_count=len(history), current_prompt_id=event.get("id"),
-                        prompt_model=event.get("model", ""),
-                        prompt_created_at=event.get("created_at", ""),
-                    )
+                    if event.get("status") == "pending":
+                        history = active.setdefault("prompt_history", [])
+                        history.append(event)
+                        del history[:-50]
+                        active.update(
+                            prompt_count=len(history), current_prompt_id=event.get("id"),
+                            prompt_model=event.get("model", ""),
+                            prompt_created_at=event.get("created_at", ""),
+                        )
+                    logs = active.setdefault("log_entries", [])
+                    logs.append(event)
+                    del logs[:-200]
             trace_context = capture_prompts(trace_prompt)
             trace_context.__enter__()
             try:
@@ -296,7 +301,7 @@ class ArcsChatManager:
                 }
             return {
                 k: v for k, v in job.items()
-                if k not in {"pause_event", "stop_event", "cancel_event", "prompt_history"}
+                if k not in {"pause_event", "stop_event", "cancel_event", "prompt_history", "log_entries"}
             }
 
     def prompts(self, workspace: str, volume: int) -> dict[str, Any]:
@@ -305,6 +310,20 @@ class ArcsChatManager:
             return {
                 "job_id": job.get("id") if job else None,
                 "items": [dict(item) for item in (job or {}).get("prompt_history", [])],
+            }
+
+    def logs(self, workspace: str, volume: int, offset: int = 0) -> dict[str, Any]:
+        with self._jobs_lock:
+            job = self._jobs.get((workspace, volume))
+            if not job:
+                return {"items": [], "next_offset": 0}
+            entries = job.get("log_entries", [])
+            sliced = entries[offset:]
+            return {
+                "job_id": job.get("id"),
+                "status": job.get("status", "idle"),
+                "items": [dict(item) for item in sliced],
+                "next_offset": len(entries),
             }
 
     def continue_incomplete(self, workspace: str, volume: int) -> dict[str, Any]:
@@ -362,6 +381,7 @@ class ArcsChatManager:
                 raise ValueError("当前舞台仍在生成，请先结束任务再重置。")
             if job:
                 job["prompt_history"] = []
+                job["log_entries"] = []
                 job["prompt_count"] = 0
                 for field in ("current_prompt_id", "prompt_model", "prompt_created_at"):
                     job.pop(field, None)

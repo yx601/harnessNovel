@@ -110,7 +110,7 @@ class DraftChatManager:
                 "completed": 0, "total": 0, "progress_kind": "drafts",
                 "message": "任务已创建，正在启动", "pause_event": pause,
                 "stop_event": stop, "cancel_event": cancel,
-                "prompt_history": [], "prompt_count": 0, "error": "",
+                "prompt_history": [], "log_entries": [], "prompt_count": 0, "error": "",
             }
             self._jobs[key] = job
         conv = self.get(workspace, volume, arc_idx)
@@ -131,14 +131,18 @@ class DraftChatManager:
                     active = self._jobs.get(key)
                     if not active or active["id"] != job["id"]:
                         return
-                    history = active.setdefault("prompt_history", [])
-                    history.append(event)
-                    del history[:-50]
-                    active.update(
-                        prompt_count=len(history), current_prompt_id=event.get("id"),
-                        prompt_model=event.get("model", ""),
-                        prompt_created_at=event.get("created_at", ""),
-                    )
+                    if event.get("status") == "pending":
+                        history = active.setdefault("prompt_history", [])
+                        history.append(event)
+                        del history[:-50]
+                        active.update(
+                            prompt_count=len(history), current_prompt_id=event.get("id"),
+                            prompt_model=event.get("model", ""),
+                            prompt_created_at=event.get("created_at", ""),
+                        )
+                    logs = active.setdefault("log_entries", [])
+                    logs.append(event)
+                    del logs[:-200]
             trace_context = capture_prompts(trace_prompt)
             trace_context.__enter__()
             try:
@@ -219,7 +223,7 @@ class DraftChatManager:
         with self._lock:
             job = self._jobs.get((workspace, volume, arc_idx))
             if job:
-                return {key: value for key, value in job.items() if key not in {"pause_event", "stop_event", "cancel_event", "prompt_history"}}
+                return {key: value for key, value in job.items() if key not in {"pause_event", "stop_event", "cancel_event", "prompt_history", "log_entries"}}
         from training.adaptive_builder import chapter_draft_resume_status
         return {"status": "idle", "phase": "idle", "message": "", **chapter_draft_resume_status(init_workspace(workspace), volume, arc_idx)}
 
@@ -229,6 +233,20 @@ class DraftChatManager:
             return {
                 "job_id": job.get("id") if job else None,
                 "items": [dict(item) for item in (job or {}).get("prompt_history", [])],
+            }
+
+    def logs(self, workspace, volume, arc_idx, offset=0):
+        with self._lock:
+            job = self._jobs.get((workspace, volume, arc_idx))
+            if not job:
+                return {"items": [], "next_offset": 0}
+            entries = job.get("log_entries", [])
+            sliced = entries[offset:]
+            return {
+                "job_id": job.get("id"),
+                "status": job.get("status", "idle"),
+                "items": [dict(item) for item in sliced],
+                "next_offset": len(entries),
             }
 
     def _control(self, workspace, volume, arc_idx, action):
@@ -272,6 +290,7 @@ class DraftChatManager:
                 raise ValueError("当前故事情节正在生成正文，请先结束任务再重置。")
             if job:
                 job["prompt_history"] = []
+                job["log_entries"] = []
                 job["prompt_count"] = 0
                 for field in ("current_prompt_id", "prompt_model", "prompt_created_at"):
                     job.pop(field, None)

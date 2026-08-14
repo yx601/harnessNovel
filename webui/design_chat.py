@@ -425,6 +425,7 @@ class DesignChatManager:
                 "stop_event": stop_event,
                 "cancel_event": cancel_event,
                 "prompt_history": [],
+                "log_entries": [],
                 "prompt_count": 0,
                 "error": "",
             }
@@ -448,15 +449,21 @@ class DesignChatManager:
                     active = self._jobs.get(key)
                     if not active or active.get("id") != job["id"]:
                         return
-                    history = active.setdefault("prompt_history", [])
-                    history.append(event)
-                    del history[:-50]
-                    active.update(
-                        prompt_count=len(history),
-                        current_prompt_id=event.get("id"),
-                        prompt_model=event.get("model", ""),
-                        prompt_created_at=event.get("created_at", ""),
-                    )
+                    # prompt 事件：追加到 prompt_history 和 log_entries
+                    if event.get("status") == "pending":
+                        history = active.setdefault("prompt_history", [])
+                        history.append(event)
+                        del history[:-50]
+                        active.update(
+                            prompt_count=len(history),
+                            current_prompt_id=event.get("id"),
+                            prompt_model=event.get("model", ""),
+                            prompt_created_at=event.get("created_at", ""),
+                        )
+                    # 所有事件（prompt + response）都追加到 log_entries
+                    logs = active.setdefault("log_entries", [])
+                    logs.append(event)
+                    del logs[:-200]  # 保留最近 200 条日志
             trace_context = capture_prompts(trace_prompt)
             trace_context.__enter__()
             try:
@@ -513,7 +520,7 @@ class DesignChatManager:
             else:
                 status = {
                 key: value for key, value in job.items()
-                if key not in {"pause_event", "stop_event", "cancel_event", "prompt_history"}
+                if key not in {"pause_event", "stop_event", "cancel_event", "prompt_history", "log_entries"}
                 }
         if scope == "stage" and status.get("status") in {"idle", "stopped", "failed"}:
             status.update(_stage_resume_status(init_workspace(workspace)))
@@ -527,6 +534,21 @@ class DesignChatManager:
             return {
                 "job_id": job.get("id"),
                 "items": [dict(item) for item in job.get("prompt_history", [])],
+            }
+
+    def logs(self, workspace: str, scope: str, offset: int = 0) -> dict[str, Any]:
+        """返回增量日志条目（prompt + response 事件流）。"""
+        with self._jobs_lock:
+            job = self._jobs.get((workspace, scope))
+            if not job:
+                return {"items": [], "next_offset": 0}
+            entries = job.get("log_entries", [])
+            sliced = entries[offset:]
+            return {
+                "job_id": job.get("id"),
+                "status": job.get("status", "idle"),
+                "items": [dict(item) for item in sliced],
+                "next_offset": len(entries),
             }
 
     def continue_incomplete(self, workspace: str, scope: str) -> dict[str, Any]:
@@ -588,6 +610,7 @@ class DesignChatManager:
                 raise ValueError("当前设计任务仍在执行，请先结束任务再重置。")
             if job:
                 job["prompt_history"] = []
+                job["log_entries"] = []
                 job["prompt_count"] = 0
                 for field in ("current_prompt_id", "prompt_model", "prompt_created_at"):
                     job.pop(field, None)

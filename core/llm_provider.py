@@ -1,8 +1,9 @@
 import os
 import threading
+import time
 from openai import OpenAI
 from core.text_utils import normalize_text
-from core.prompt_trace import record_prompt
+from core.prompt_trace import record_prompt, record_response
 
 # 不值得重试的 HTTP 状态码（认证/余额等确定性错误）
 _NO_RETRY_CODES = {401, 402, 403}
@@ -48,9 +49,10 @@ class LLMProvider:
         成功返回归一化后的文本；未配置 api_key 或 API 调用失败（重试耗尽 /
         401/402/403 等确定性错误）时返回空字符串并打印警告。
         """
-        record_prompt(prompt, self.model)
+        event = record_prompt(prompt, self.model)
         if not self.client:
             print("[LLMProvider] 未配置 api_key，无法调用模型，返回空内容。")
+            record_response(event["id"], error="未配置 api_key", model=self.model)
             return ""
 
         print(f"[LLMProvider] 正在调用模型 {self.model} ...")
@@ -65,19 +67,29 @@ class LLMProvider:
         if is_json:
             kwargs["response_format"] = response_format
 
+        start_time = time.monotonic()
         for attempt in range(max_retries + 1):
             try:
                 response = self.client.chat.completions.create(**kwargs)
-                return normalize_text(response.choices[0].message.content)
+                result_text = normalize_text(response.choices[0].message.content)
+                elapsed = time.monotonic() - start_time
+                record_response(
+                    event["id"], response=result_text, elapsed_sec=elapsed,
+                    model=self.model, prompt=prompt,
+                )
+                return result_text
             except Exception as e:
                 status_code = getattr(e, 'status_code', None)
                 if status_code in _NO_RETRY_CODES:
                     print(f"[LLMProvider] API 错误 ({status_code})，不可重试。")
+                    record_response(event["id"], error=f"API {status_code}: {e}",
+                                   model=self.model, prompt=prompt)
                     break
                 if attempt < max_retries:
                     print(f"[LLMProvider] API 调用失败（第{attempt+1}次），重试中... 错误: {e}")
                 else:
                     print(f"[LLMProvider] API 调用失败，已重试{max_retries}次。错误: {e}")
+                    record_response(event["id"], error=str(e), model=self.model, prompt=prompt)
 
         print("[LLMProvider] 调用失败，返回空内容（请检查 API Key / 余额 / 网络）。")
         return ""
@@ -92,9 +104,11 @@ class LLMProvider:
         max_retries=2,
     ):
         """执行可取消、可重试的请求；取消后不会返回未完成内容。"""
-        record_prompt(prompt, self.model)
+        event = record_prompt(prompt, self.model)
         if not self.api_key:
+            record_response(event["id"], error="未配置 api_key", model=self.model)
             return ""
+        start_time = time.monotonic()
         for attempt in range(max_retries + 1):
             if cancel_event is not None and cancel_event.is_set():
                 raise LLMCallCancelled("模型请求已取消")
@@ -133,11 +147,17 @@ class LLMProvider:
             except Exception:
                 pass
             if "error" not in outcome:
+                elapsed = time.monotonic() - start_time
+                record_response(
+                    event["id"], response=outcome.get("result", ""),
+                    elapsed_sec=elapsed, model=self.model, prompt=prompt,
+                )
                 return outcome.get("result", "")
 
             error = outcome["error"]
             status_code = getattr(error, "status_code", None)
             if status_code in _NO_RETRY_CODES or attempt >= max_retries:
+                record_response(event["id"], error=str(error), model=self.model, prompt=prompt)
                 raise error
 
             wait_seconds = min(4.0, 1.5 * (attempt + 1))
