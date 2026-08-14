@@ -1451,6 +1451,7 @@ async function sendDesignMessage(scope) {
     wizardState.designJobCompleted[scope] = 0;
     const logKey = `design:${scope}`;
     wizardState.reasoningLogOffset[logKey] = 0;
+    $("#design-job-progress")?.remove();
     const composer = $("#design-chat .chat-composer");
     composer?.insertAdjacentHTML("beforebegin", designJobMarkup(job));
     bindDesignJobControls(scope);
